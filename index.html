@@ -7,14 +7,18 @@
     body {
       font-family: 'Segoe UI', sans-serif;
       text-align: center;
-      background: #111;
+      background: #00455D;
       color: white;
       padding-top: 60px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 100vh;
     }
     #ticket {
       font-size: 80px;
       margin-bottom: 20px;
-      color: #00ffcc;
+      color: white;
     }
     #window {
       font-size: 48px;
@@ -27,9 +31,20 @@
     audio {
       display: none;
     }
+
+    .blink {
+      animation: blink-animation 0.3s steps(1, start) 6;
+    }
+
+    @keyframes blink-animation {
+      50% {
+        opacity: 0;
+      }
+    }
   </style>
 </head>
 <body>
+  <img src="logo-black-1.png" alt="Header Image" style="max-width: 300px; height: auto; margin: 0 auto 40px auto; display: block;">
   <div id="ticket">Now Serving: -</div>
   <div id="window">At Window: -</div>
   <div id="unlocked">🔇 Tap anywhere to enable announcements</div>
@@ -50,7 +65,7 @@
         const dummy = new Audio();
         dummy.play().catch(() => {});
         audioUnlocked = true;
-        document.getElementById("unlocked").innerText = "🔊 Audio unlocked";
+        document.getElementById("unlocked").style.display = "none";
         selectedVoice = pickBestEnglishVoice();
         console.log("✅ Using voice:", selectedVoice?.name);
         pollAnnouncements();
@@ -108,8 +123,19 @@
           if (!data || !data.ticket_number || !data.desk_name) continue;
 
           // Update UI
-          document.getElementById("ticket").innerText = "Now Serving: " + data.ticket_number;
-          document.getElementById("window").innerText = "At Window: " + data.desk_name;
+          const ticketEl = document.getElementById("ticket");
+          const windowEl = document.getElementById("window");
+
+          ticketEl.innerText = "Now Serving: " + data.ticket_number;
+          windowEl.innerText = "At Window: " + data.desk_name;
+
+          ticketEl.classList.remove("blink");
+          void ticketEl.offsetWidth; // trigger reflow
+          ticketEl.classList.add("blink");
+
+          windowEl.classList.remove("blink");
+          void windowEl.offsetWidth;
+          windowEl.classList.add("blink");
 
           const prefix = data.ticket_number.replace(/[0-9]/g, '');
           const number = parseInt(data.ticket_number.replace(/[^0-9]/g, ''), 10);
