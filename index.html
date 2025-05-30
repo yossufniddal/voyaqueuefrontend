@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Now Serving</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      text-align: center;
+      background: #111;
+      color: white;
+      padding-top: 60px;
+    }
+    #ticket {
+      font-size: 80px;
+      margin-bottom: 20px;
+      color: #00ffcc;
+    }
+    #window {
+      font-size: 48px;
+      color: #ffa500;
+    }
+    #unlocked {
+      color: lime;
+      margin-top: 20px;
+    }
+    audio {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="ticket">Now Serving: -</div>
+  <div id="window">At Window: -</div>
+  <div id="unlocked">🔇 Tap anywhere to enable announcements</div>
+
+  <audio id="ding" preload="auto">
+    <source src="ding.ogg" type="audio/ogg">
+  </audio>
+
+  <script>
+    const API_BASE_URL = "https://qapi.yossuf.com"; // <-- Change this to your actual IP
+    const queue = [];
+    let selectedVoice = null;
+    let audioUnlocked = false;
+    let isSpeaking = false;
+
+    document.body.addEventListener("click", () => {
+      if (!audioUnlocked) {
+        const dummy = new Audio();
+        dummy.play().catch(() => {});
+        audioUnlocked = true;
+        document.getElementById("unlocked").innerText = "🔊 Audio unlocked";
+        selectedVoice = pickBestEnglishVoice();
+        console.log("✅ Using voice:", selectedVoice?.name);
+        pollAnnouncements();
+      }
+    }, { once: true });
+
+    function pickBestEnglishVoice() {
+      const voices = speechSynthesis.getVoices();
+      const englishVoices = voices.filter(v => v.lang.startsWith("en"));
+      return englishVoices.find(v =>
+        v.name.includes("Samantha") || v.name.includes("Karen") ||
+        v.name.includes("Daniel") || v.name.includes("Shelley")
+      ) || englishVoices[0];
+    }
+
+    function triggerSpeech(text) {
+      return new Promise(resolve => {
+        if (!selectedVoice) {
+          console.warn("❌ No voice selected!");
+          resolve();
+          return;
+        }
+
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.voice = selectedVoice;
+        utter.lang = selectedVoice.lang || 'en-US';
+        utter.onend = () => {
+          setTimeout(() => resolve(), 500); // Delay before next poll
+        };
+
+        console.log("📣 Speaking:", text);
+        speechSynthesis.speak(utter);
+      });
+    }
+
+    function playDing() {
+      return new Promise(resolve => {
+        const ding = document.getElementById("ding");
+        ding.onended = resolve;
+        ding.onerror = resolve;
+        ding.play().catch(resolve);
+      });
+    }
+
+    async function pollAnnouncements() {
+      while (audioUnlocked) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/latest-announcement`);
+          if (response.status === 204) {
+            await delay(2000); // No ticket, wait and retry
+            continue;
+          }
+
+          const data = await response.json();
+          if (!data || !data.ticket_number || !data.desk_name) continue;
+
+          // Update UI
+          document.getElementById("ticket").innerText = "Now Serving: " + data.ticket_number;
+          document.getElementById("window").innerText = "At Window: " + data.desk_name;
+
+          const prefix = data.ticket_number.replace(/[0-9]/g, '');
+          const number = parseInt(data.ticket_number.replace(/[^0-9]/g, ''), 10);
+          const message = `Customer number ${prefix} ${number}, window number ${data.desk_name}`;
+
+          await playDing();
+          await triggerSpeech(message);
+        } catch (err) {
+          console.error("❌ Error fetching announcement:", err);
+          await delay(3000);
+        }
+      }
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    speechSynthesis.onvoiceschanged = () => {
+      if (!selectedVoice && audioUnlocked) {
+        selectedVoice = pickBestEnglishVoice();
+        console.log("✅ Voice loaded:", selectedVoice?.name);
+      }
+    };
+  </script>
+</body>
+</html>
