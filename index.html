@@ -2,165 +2,171 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Now Serving</title>
+  <title>Desk Ticket Caller</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
-      font-family: 'Segoe UI', sans-serif;
+      font-family: Arial, sans-serif;
+      background-color: #f0f4f8;
+      padding: 20px;
       text-align: center;
-      background: #00455D;
-      color: white;
-      padding-top: 60px;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-start;
-      min-height: 100vh;
-      overflow: hidden;
     }
-    #ticket {
-      font-size: 80px;
+
+    #logo {
+      max-width: 150px;
       margin-bottom: 20px;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+
+    select {
+      width: 100%;
+      max-width: 400px;
+      padding: 14px;
+      margin: 10px auto;
+      font-size: 18px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      display: block;
+      box-sizing: border-box;
+    }
+
+    .button {
+      width: 100%;
+      max-width: 400px;
+      padding: 16px;
+      font-size: 18px;
+      margin: 10px auto;
+      border: none;
+      border-radius: 8px;
       color: white;
+      display: block;
+      cursor: pointer;
+      box-sizing: border-box;
     }
-    #window {
-      font-size: 48px;
-      color: #ffa500;
-    }
-    #unlocked {
-      color: lime;
+
+    .call-btn { background-color: #28a745; }
+    .recall-btn { background-color: #ffc107; color: #222; }
+    .skip-btn { background-color: #dc3545; }
+
+    .call-btn:hover { background-color: #218838; }
+    .recall-btn:hover { background-color: #e0a800; }
+    .skip-btn:hover { background-color: #c82333; }
+
+    #status {
+      font-size: 22px;
+      color: #007acc;
       margin-top: 20px;
-    }
-    audio {
-      display: none;
-    }
-
-    .blink {
-      animation: blink-animation 0.3s steps(1, start) 6;
-    }
-
-    @keyframes blink-animation {
-      50% {
-        opacity: 0;
-      }
     }
   </style>
 </head>
 <body>
-  <img src="logo-black-1.png" alt="Header Image" style="max-width: 300px; height: auto; margin: 40px auto; display: block;">
-  <div id="ticket">Now Serving: -</div>
-  <div id="window">At Window: -</div>
-  <div id="unlocked">🔇 Tap anywhere to enable announcements</div>
 
-  <audio id="ding" preload="auto">
-    <source src="ding.ogg" type="audio/ogg">
-  </audio>
+  <img src="images.png" alt="Logo" id="logo" />
+  <h1>Desk Ticket Caller</h1>
+
+  <select id="deskId">
+    <option value="" disabled selected>Select Window</option>
+    <script>
+      for (let i = 1; i <= 19; i++) {
+        document.write(`<option value="${i}">Window ${i}</option>`);
+      }
+    </script>
+  </select>
+
+  <button class="button call-btn" onclick="callNext()">📞 Call Next Ticket</button>
+  <button class="button recall-btn" onclick="recallTicket()">🔁 Recall Ticket</button>
+  <button class="button skip-btn" onclick="skipTicket()">⏭️ Skip Ticket</button>
+
+  <div id="status">Now Serving: -</div>
 
   <script>
-    const API_BASE_URL = "https://qapi.yossuf.com"; // <-- Change this to your actual IP
-    const queue = [];
-    let selectedVoice = null;
-    let audioUnlocked = false;
-    let isSpeaking = false;
+    const API_BASE_URL = "https://qapi.yossuf.com";
 
-    document.body.addEventListener("click", () => {
-      if (!audioUnlocked) {
-        const dummy = new Audio();
-        dummy.play().catch(() => {});
-        audioUnlocked = true;
-        document.getElementById("unlocked").style.display = "none";
-        selectedVoice = pickBestEnglishVoice();
-        console.log("✅ Using voice:", selectedVoice?.name);
-        pollAnnouncements();
-      }
-    }, { once: true });
+    let lastTicket = null;
 
-    function pickBestEnglishVoice() {
-      const voices = speechSynthesis.getVoices();
-      const englishVoices = voices.filter(v => v.lang.startsWith("en"));
-      return englishVoices.find(v =>
-        v.name.includes("Samantha") || v.name.includes("Karen") ||
-        v.name.includes("Daniel") || v.name.includes("Shelley")
-      ) || englishVoices[0];
+    function updateStatus(text) {
+      document.getElementById("status").innerText = text;
     }
 
-    function triggerSpeech(text) {
-      return new Promise(resolve => {
-        if (!selectedVoice) {
-          console.warn("❌ No voice selected!");
-          resolve();
-          return;
+    async function callNext() {
+      const deskId = Number(document.getElementById("deskId").value);
+      const body = {
+        desk_id: deskId,
+        service_id: 1,
+        previous_ticket_number: lastTicket
+      };
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/call-next-ticket`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+
+        const data = await res.json();
+        if (data.next_ticket_number) {
+          lastTicket = data.next_ticket_number;
+          updateStatus("Now Serving: " + lastTicket);
+        } else {
+          updateStatus("No tickets in queue.");
         }
-
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.voice = selectedVoice;
-        utter.lang = selectedVoice.lang || 'en-US';
-        utter.onend = () => {
-          setTimeout(() => resolve(), 500); // Delay before next poll
-        };
-
-        console.log("📣 Speaking:", text);
-        speechSynthesis.speak(utter);
-      });
-    }
-
-    function playDing() {
-      return new Promise(resolve => {
-        const ding = document.getElementById("ding");
-        ding.onended = resolve;
-        ding.onerror = resolve;
-        ding.play().catch(resolve);
-      });
-    }
-
-    async function pollAnnouncements() {
-      while (audioUnlocked) {
-        try {
-          const response = await fetch(`${API_BASE_URL}/latest-announcement`);
-          if (response.status === 204) {
-            await delay(2000); // No ticket, wait and retry
-            continue;
-          }
-
-          const data = await response.json();
-          if (!data || !data.ticket_number || !data.desk_name) continue;
-
-          // Update UI
-          const ticketEl = document.getElementById("ticket");
-          const windowEl = document.getElementById("window");
-
-          ticketEl.innerText = "Now Serving: " + data.ticket_number;
-          windowEl.innerText = "At Window: " + data.desk_name;
-
-          ticketEl.classList.remove("blink");
-          void ticketEl.offsetWidth; // trigger reflow
-          ticketEl.classList.add("blink");
-
-          windowEl.classList.remove("blink");
-          void windowEl.offsetWidth;
-          windowEl.classList.add("blink");
-
-          const prefix = data.ticket_number.replace(/[0-9]/g, '');
-          const number = parseInt(data.ticket_number.replace(/[^0-9]/g, ''), 10);
-          const message = `Customer number ${prefix} ${number}, window number ${data.desk_name}`;
-
-          await playDing();
-          await triggerSpeech(message);
-        } catch (err) {
-          console.error("❌ Error fetching announcement:", err);
-          await delay(3000);
-        }
+      } catch (err) {
+        console.error(err);
+        updateStatus("❌ Error calling ticket");
       }
     }
 
-    function delay(ms) {
-      return new Promise(resolve => setTimeout(resolve, ms));
+    async function recallTicket() {
+      if (!lastTicket) return updateStatus("⚠️ No ticket to recall.");
+      const deskId = Number(document.getElementById("deskId").value);
+      const body = {
+        desk_id: deskId,
+        service_id: 1,
+        ticket_number: lastTicket
+      };
+
+      try {
+        await fetch(`${API_BASE_URL}/recall-ticket`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        updateStatus("🔁 Recalled: " + lastTicket);
+      } catch (err) {
+        console.error(err);
+        updateStatus("❌ Error recalling ticket");
+      }
     }
 
-    speechSynthesis.onvoiceschanged = () => {
-      if (!selectedVoice && audioUnlocked) {
-        selectedVoice = pickBestEnglishVoice();
-        console.log("✅ Voice loaded:", selectedVoice?.name);
+    async function skipTicket() {
+      if (!lastTicket) return updateStatus("⚠️ No ticket to skip.");
+      const deskId = Number(document.getElementById("deskId").value);
+      const body = {
+        desk_id: deskId,
+        service_id: 1,
+        ticket_number: lastTicket
+      };
+
+      try {
+        await fetch(`${API_BASE_URL}/skip-ticket`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        updateStatus("⏭️ Skipped: " + lastTicket);
+        lastTicket = null;
+
+        // Call next ticket after skipping
+        await callNext();
+      } catch (err) {
+        console.error(err);
+        updateStatus("❌ Error skipping ticket");
       }
-    };
+    }
   </script>
 </body>
 </html>
